@@ -190,7 +190,7 @@ begin
 		ϕX = ϕ(X)
 		ϕx = ϕ(xx)
 		invΣ = inv(Σ)
-		A = inv(Σ) + σ^(-2)*ϕX*ϕX'
+		A = invΣ + σ^(-2)*ϕX*ϕX'
 		G = cholesky(A)
 		A = (G\ϕx)'
 		μₙ = A*(invΣ*μ + σ^(-2)*ϕX*y)
