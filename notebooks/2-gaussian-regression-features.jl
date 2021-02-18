@@ -13,24 +13,44 @@ macro bind(def, element)
     end
 end
 
+# ╔═╡ dca94b3a-7122-11eb-3080-fdbc8581823a
+begin
+	"""This is just to include external files. Please ignore it"""
+	function ingredients(path::String)
+		# this is from the Julia source code (evalfile in base/loading.jl)
+		# but with the modification that it returns the module instead of the last object
+		name = Symbol(basename(path))
+		m = Module(name)
+		Core.eval(m,
+	        Expr(:toplevel,
+	             :(eval(x) = $(Expr(:core, :eval))($name, x)),
+	             :(include(x) = $(Expr(:top, :include))($name, x)),
+	             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
+	             :(include($path))))
+		m
+	end
+	
+	GR = ingredients("../src/gaussian_regression.jl")
+	Data = ingredients("../src/data.jl")
+end
+
 # ╔═╡ 23451f6e-6e1d-11eb-35fb-1b560a12e694
 begin
 	using Random, Distributions, LinearAlgebra, Parameters, Plots, PlutoUI
 	using Zygote: gradient
-	Random.seed!(1231245)
-	σ = .5
-	N = 50
-	X = collect(range(-6, 6; length = N)) .+ randn(N)
-	y = X .+ randn(N)
-	y[10:30] .= y[10:30] .+ 4
-	y[30:40] .= sin.(y[30:40]) 
-	scatter(X, y, title = "Observed data", 
+
+	X, y = Data.linreg_toy_data()
+	X = X[:]
+	N = size(X)
+	xlim = -10, 10
+	scatter(
+		X, y, title = "Observed data", 
 		xlabel = "X", ylabel = "y",
 		label = nothing
 	)
 end
 
-# ╔═╡ 67c6886a-6a4b-11eb-377b-278d91b6d03f
+# ╔═╡ 50d287fa-720f-11eb-3f79-bddf652bf4da
 
 
 # ╔═╡ b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
@@ -41,58 +61,13 @@ We will leave the calibration issue for a bit and focus on improving the model f
 
 We are going to use the same setting as in the previous notebook. Recall that $X \in \mathbb{R}^{D \times N}$ is the data matrix with $N$ observations of dimension $D$ and $\mathbf{y} \in \mathbb{R}^N$ the observed values.
 
+The `linreg_toy_data` and `GaussianRegression` can be found in `gaussian_linreg.jl`.
+
 [Probabilistic ML - Lecture 8 - Learning Representations](https://www.youtube.com/watch?v=Zb0K_S5JJU4&t=1142s)
 """
 
-# ╔═╡ 79934a56-6e1c-11eb-0728-1b6a25618285
-md"""
-Before we move on, here is cleaned-up version of the code from the last notebook.
-"""
-
-# ╔═╡ e34a66c8-6e9c-11eb-1ab3-392857ed152b
-begin
-	@with_kw struct GaussianRegression{T<:Real, F}
-		X::Vector{T}
-		y::Vector{T}
-		μ::Vector{T}
-		Σ::Matrix{T}
-		σ::T
-		ϕ::F
-	end
-	
-	function prior_f(reg::GaussianRegression, x)
-		@unpack μ, Σ, ϕ = reg
-		ϕₓ = ϕ(x)
-		m = ϕₓ'*μ
-		s = ϕₓ'*Σ*ϕₓ
-		m, s
-	end
-	
-	function prior_sample_f(reg::GaussianRegression, x, kwargs...)
-		@unpack μ, Σ, ϕ = reg
-		pw = MvNormal(μ, Σ)
-		w = rand(pw, kwargs...)
-		f = ϕ(x)'*w
-	end
-
-	"""Here we use the alterantive posterior identity since K < N."""
-	function posterior_f(reg::GaussianRegression, x)
-		@unpack X, y, μ, Σ, σ, ϕ = reg
-		ϕX = ϕ(X)
-		ϕx = ϕ(x)
-		invΣ = inv(Σ)
-		A = Symmetric(invΣ + σ^(-2)*ϕX*ϕX')
-		G = cholesky(A)
-		A = (G\ϕx)'
-		μₙ = A*(invΣ*μ + σ^(-2)*ϕX*y)
-		Σₙ = A*ϕx
-		μₙ, Σₙ
-	end
-end
-
 # ╔═╡ 659f63b2-6ea7-11eb-2333-35d3f51a748c
 begin
-	xlim = -10, 10
 	feature_grid(f, xx) = mapreduce(f, hcat, xx)'
 	step(xx) = x -> feature_grid(x′ -> Int.(x .>= x′), xx)
 	gaussian(xx; θ₁ = 10, θ₂ = 4) = 
@@ -121,42 +96,16 @@ Feature function $(@bind feature_name Select(collect(keys(ϕs))))
 
 # ╔═╡ 5114873e-6dfc-11eb-0da3-21a6186d9da2
 begin
-	function plot_features(reg, K)
-		xx = collect(range(xlim..., length = 200))
-		μ₀, Σ₀ = prior_f(reg, xx)
-		fs = prior_sample_f(reg, xx, 5)
-		prior_plt = plot(xx, μ₀, ribbon=2*sqrt.(diag(Σ₀)), 
-			title = "Prior predictive",
-			xlabel = "x",
-			ylabel = "p(f)",
-			legend = :topleft,
-			label = nothing
-		)
-		for (i, f) in enumerate(eachcol(fs))
-			plot!(prior_plt, xx, f, color = 3,
-				label = i == 1 ? "Prior sample" : nothing)
-		end
-
-		scatter!(prior_plt, X, y, label = "Observations", color = 1)
-
-		μₙ, Σₙ = posterior_f(reg, xx)
-		posterior_plt  = plot(xx, μₙ, ribbon = 2*sqrt.(diag(Σₙ)), 
-			color = 2,
-			label = "p(f | X, y)", legend =:topleft)
-		scatter!(posterior_plt, X, y, label = "Observations",
-			color = 1,
-			title ="Posterior predictive",
-			xlabel = "x", ylabel = "f(x)")
-	
-		plot(prior_plt, posterior_plt, layout = (2, 1), size = (600, 600))
-	end
-	
-	reg₁ = GaussianRegression(
+	reg₁ = GR.GaussianRegression(
 		X, y, zeros(N), diagm(ones(N)), .5,
 		features(feature_name, X)
 	)
-	plot_features(reg₁, N)
+	xx = collect(range(xlim..., length = 200))
+	GR.plot_features(reg₁, xx)
 end
+
+# ╔═╡ 04ceeabc-7212-11eb-14ca-077d1ba576c1
+
 
 # ╔═╡ 4acd1fa0-6eb3-11eb-15b2-bf84b53f3880
 md"""
@@ -167,17 +116,6 @@ Number of features $(@bind num_features_input2 Slider(2:25; show_value=true))
 Feature function $(@bind feature_name2 Select(collect(keys(ϕs))))
 
 """
-
-# ╔═╡ 9a7dd170-6eb3-11eb-11a2-23759c9808fe
-begin
-	feature_xx = range(xlim..., length = num_features_input2)
-	reg₂ = GaussianRegression(
-		X, y, zeros(num_features_input2),
-		diagm(ones(num_features_input2)), σ,
-		features(feature_name2, feature_xx)
-	)
-	plot_features(reg₂, num_features_input2)
-end
 
 # ╔═╡ f93023b0-6eb5-11eb-189a-a7951ec0431e
 md"""
@@ -259,31 +197,43 @@ begin
 		end
 		θ, losses
 	end
+	σ = 0.5
 	K = input_k3
 	θ₀ = collect(range(-10, 10, length = K)) .+ randn(K)
 	loss = marginal_likelihood(X, y, ones(K), diagm(ones(K)), σ^2*I(length(X)))
 	θ̂, losses = fit(loss, θ₀; steps = 100)
 end;
 
+# ╔═╡ 9a7dd170-6eb3-11eb-11a2-23759c9808fe
+begin
+	feature_xx = range(xlim...; length = num_features_input2)
+	reg₂ = GR.GaussianRegression(
+		X, y, zeros(num_features_input2),
+		diagm(ones(num_features_input2)), σ,
+		features(feature_name2, feature_xx)
+	)
+	GR.plot_features(reg₂, xx)
+end
+
 # ╔═╡ f7ae77f2-6ed9-11eb-33f7-db8775acec19
 begin
-	reg₃ = GaussianRegression(
+	reg₃ = GR.GaussianRegression(
 		X, y, zeros(K), diagm(ones(K)), σ,
 		features(input_feature3, θ̂)
 	)
 	
-	xx = collect(range(xlim..., length = 200))
-	μₙ, Σₙ = posterior_f(reg₃, xx)
-	posterior_plt  = plot(xx, μₙ, ribbon = 2*sqrt.(diag(Σₙ)), 
-		color = 2, label = "p(f | X, y)", legend =:topleft)
+	pf = GR.posterior_f(reg₃, xx)
+	posterior_plt  = plot(xx, pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
+		color = 2, label = "p(f | X, y)", legend =:topleft,
+		xlim = xlim, ylim=(-10, 10))
 	scatter!(posterior_plt, X, y, label = "Observations",
 		color = 1,
 		title ="Posterior predictive",
 		xlabel = "x", ylabel = "f(x)")
-	scatter!(posterior_plt, θ̂, -5 .* ones(length(θ̂)),
+	scatter!(posterior_plt, θ̂, -9.6 .* ones(length(θ̂)),
 		markershape = :uptriangle,
 		label = "Feature locations")
-	
+
 	loss_plt = plot(losses, title = "Loss curve",
 		label = nothing, xlabel = "Iteration", ylabel = "Loss")
 	plot(loss_plt, posterior_plt, layout = (2, 1), size = (600, 600))
@@ -298,18 +248,18 @@ In this notebook we expanded the notion of Gaussian inference to more flexible f
 """
 
 # ╔═╡ Cell order:
-# ╟─67c6886a-6a4b-11eb-377b-278d91b6d03f
-# ╠═b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
-# ╠═23451f6e-6e1d-11eb-35fb-1b560a12e694
-# ╠═79934a56-6e1c-11eb-0728-1b6a25618285
-# ╠═e34a66c8-6e9c-11eb-1ab3-392857ed152b
+# ╠═dca94b3a-7122-11eb-3080-fdbc8581823a
+# ╠═50d287fa-720f-11eb-3f79-bddf652bf4da
+# ╟─b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
+# ╟─23451f6e-6e1d-11eb-35fb-1b560a12e694
 # ╟─0f529eae-6ea5-11eb-280c-9106b55e81fe
 # ╟─659f63b2-6ea7-11eb-2333-35d3f51a748c
 # ╟─5114873e-6dfc-11eb-0da3-21a6186d9da2
+# ╠═04ceeabc-7212-11eb-14ca-077d1ba576c1
 # ╟─4acd1fa0-6eb3-11eb-15b2-bf84b53f3880
-# ╠═9a7dd170-6eb3-11eb-11a2-23759c9808fe
+# ╟─9a7dd170-6eb3-11eb-11a2-23759c9808fe
 # ╟─f93023b0-6eb5-11eb-189a-a7951ec0431e
 # ╟─574db804-6ec0-11eb-205c-65ad68022b58
 # ╟─f0ef960a-6ecd-11eb-2a55-7d447bea3af4
-# ╟─f7ae77f2-6ed9-11eb-33f7-db8775acec19
-# ╠═0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
+# ╠═f7ae77f2-6ed9-11eb-33f7-db8775acec19
+# ╟─0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6

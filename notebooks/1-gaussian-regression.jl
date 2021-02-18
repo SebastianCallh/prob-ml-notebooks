@@ -61,20 +61,20 @@ begin
 	K = length(ϕ([1]))
 	μ₀ = [μw₁, μw₂]
 	Σ₀ = [σw₁ 0; 0 σw₂]
-	pw = MvNormal(μ₀, Σ₀)
+	pw₀ = MvNormal(μ₀, Σ₀)
 	xx = collect(-8:0.2:8)
 	ϕₓ = ϕ(xx)
 	μf = ϕₓ'*μ₀
 	Σf = ϕₓ'*Σ₀*ϕₓ
 	stdf = sqrt.(diag(Σf))
-	ws = rand(pw, 5)
+	ws = rand(pw₀, 5)
 	fs = ϕₓ'*ws
 	
 	w1_grid = range(μ₀[1] .- 3*Σ₀[1,1], μ₀[1] .+ 3*Σ₀[1,1]; length = 100)
 	w2_grid = range(μ₀[2] .- 3*Σ₀[2,2], μ₀[2] .+ 3*Σ₀[2,2]; length = 100) 
 	
 	pw_plt = contour(
-		w1_grid, w2_grid, (x, y) -> pdf(pw, [x, y]), 
+		w1_grid, w2_grid, (x, y) -> pdf(pw₀, [x, y]), 
 		title = "p(w)", xlabel = "w₁", ylabel = "w₂",
 		xlim=extrema(w1_grid),
 		ylim=extrema(w2_grid),
@@ -171,7 +171,18 @@ Let us now use identities to compute the posterior.
 
 # ╔═╡ 6f01a140-6ef2-11eb-3bf1-cb378acd4bab
 begin
-	function posterior(X, y, μ = ones(2), Σ = I(2), σ = 0.5)
+	function posterior_w(X, y, μ = ones(2), Σ = I(2), σ = 0.5)
+		ϕX = ϕ(X)
+		invΣ = inv(Σ)
+		A = Symmetric(invΣ + σ^(-2) * ϕX * ϕX')
+		G = cholesky(A)
+		A = (G \ I(size(A, 1)))'
+		μₙ = A * (invΣ * μ + σ^(-2) * ϕX * y)
+		Σₙ = A
+		μₙ, Σₙ
+	end
+
+	function posterior_f(X, y, μ = ones(2), Σ = I(2), σ = 0.5)
 		ϕX = ϕ(X)
 		ϕx = ϕ(xx)
 		κxX = ϕx'*Σ*ϕX
@@ -186,7 +197,7 @@ begin
 		μₙ, Σₙ
 	end
 	
-	function posterior_alt(X, y, μ = ones(2), Σ = I(2), σ = 0.5) 
+	function posterior_f_alt(X, y, μ = ones(2), Σ = I(2), σ = 0.5) 
 		ϕX = ϕ(X)
 		ϕx = ϕ(xx)
 		invΣ = inv(Σ)
@@ -201,27 +212,40 @@ end;
 
 # ╔═╡ 2d893066-6e1b-11eb-147a-8f5062800b8d
 begin
-	μₙ, Σₙ = posterior(X, y) 
-	alt_μₙ, alt_Σₙ = posterior_alt(X, y) 
+	μₙ, Σₙ = posterior_f(X, y) 
+	alt_μₙ, alt_Σₙ = posterior_f_alt(X, y) 
 	
-	posterior_plt = scatter(
+	posterior_f_plt = scatter(
 		X, y, label = "Observations", 
 		title ="Posterior predictive",
 		xlabel = "x", ylabel = "f(x)"
 	)
-	plot!(posterior_plt , xx, μₙ, 
+	plot!(posterior_f_plt , xx, μₙ, 
 		ribbon = 2*sqrt.(diag(Σₙ)), label = "p(f | X, y)",
 		legend = :topleft
 	)
-	plot!(posterior_plt , xx, alt_μₙ, 
+	plot!(posterior_f_plt , xx, alt_μₙ, 
 		ribbon = 2*sqrt.(diag(alt_Σₙ)), label = "p(f | X, y) alt.",
 		legend = :topleft
 	)
+	
+	xx_w = collect(range(0.67, 1.5; length = 1000))
+	wμₙ, wΣₙ = posterior_w(X, y)
+	w_plots = map(enumerate(zip(wμₙ, diag(wΣₙ)))) do (i, (μ, σ))
+		density = pdf(Normal(μ, σ), xx_w)
+		plot(xx_w, density, label = "p(w$(i) | X, y))",
+		 	title = i == 1 ? "Weight posterior" : "",
+			xlabel = "w$(i)", ylabel = "p(w$(i))"
+		)
+	end
+	posterior_w_plt = plot(w_plots..., layout = (2, 1))
+	plot(posterior_f_plt, posterior_w_plt, layout = (2, 1), size = (670, 800))
+	
 end
 
 # ╔═╡ 0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
 md"""
-The plot confirms that both identities produce the same posterior. And while the posterior makes sense, it does not capture the data particularly well. Additionally, it is very(!) overconfident. There is clearly room for improvement in our modelling.
+The function posterior plot show us that both identities indeed produce the same posterior. And while the posterior makes sense, it does not capture the data particularly well. As seen in the posterior over the weights, the model is very(!) confident. There is clearly room for improvement in our modelling, but there is only so much we can do with a line.
 	
 ### Ending notes
 We have seen how to infer model weights $w$ in closed form using Gaussian distributions. We saw two identities for this, one that is more efficient when the number of parameters is larger than the number of observations, and one that is more efficient when the opposite is true.

@@ -125,7 +125,7 @@ If $y = w^Tx + \epsilon$, where $\epsilon \sim \mathcal{N}(0, \sigma^2 I)$ we ca
 \begin{equation}
 \begin{split}
 \text{Prior} \;     & p(w)             & = \mathcal{N}(\mu_0, \Sigma_0) \\
-\text{Likelihood} \; & p(y \vert x, w) & = \mathcal{N}(w^T x, \sigma^2I) \\
+\text{Likelihood} \; & p(y \vert w, x) & = \mathcal{N}(w^T x, \sigma^2I) \\
 \text{Posterior} \;  & p(w \vert y, x) & = \mathcal{N}(\mu, \Sigma)
 \end{split}
 \end{equation}
