@@ -41,7 +41,7 @@ Probabilistic inference is generally computationally difficult. But if we can as
 
 # ╔═╡ 79934a56-6e1c-11eb-0728-1b6a25618285
 md"""
-We assume the model $y(x) = \phi_x^T w$ where $\phi_x = \phi(x) : \mathbb{R}^N \mapsto \mathbb{R}^K$ is the *feature function* evaluated at $x$ and $w$ the model weights. In the case of a linear model this means $\phi_x = \left(1, x \right)$. We also assume the model weights \$w$ to be Gaussian with prior $p(w) = \mathcal{N}(w; \mu, \Sigma)$, and finally
+We assume the model $y(x) = \phi_x^T w$ where $\phi_x = \phi(x) : \mathbb{R}^N \mapsto \mathbb{R}^K$ is the *feature function* evaluated at $x$ and $w$ the model weights. In the case of a linear model this means $\phi_x = \left(1, x \right)^T$. We also assume the model weights \$w$ to be Gaussian with prior $p(w) = \mathcal{N}(w; \mu, \Sigma)$, and finally
 we assume a Gaussian likelihood
 $p(y \vert w, \phi_X) = \mathcal{N}(y; \phi_X^T w, \sigma^2I)$ with (known) independent observation noise $\sigma^2$. 
 
