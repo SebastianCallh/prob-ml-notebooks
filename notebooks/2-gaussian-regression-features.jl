@@ -13,45 +13,8 @@ macro bind(def, element)
     end
 end
 
-# ╔═╡ dca94b3a-7122-11eb-3080-fdbc8581823a
-begin
-	"""This is just to include external files. Please ignore it"""
-	function ingredients(path::String)
-		# this is from the Julia source code (evalfile in base/loading.jl)
-		# but with the modification that it returns the module instead of the last object
-		name = Symbol(basename(path))
-		m = Module(name)
-		Core.eval(m,
-	        Expr(:toplevel,
-	             :(eval(x) = $(Expr(:core, :eval))($name, x)),
-	             :(include(x) = $(Expr(:top, :include))($name, x)),
-	             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
-	             :(include($path))))
-		m
-	end
-	
-	GR = ingredients("../src/gaussian_regression.jl")
-	Data = ingredients("../src/data.jl")
-end
-
-# ╔═╡ 23451f6e-6e1d-11eb-35fb-1b560a12e694
-begin
-	using Random, Distributions, LinearAlgebra, Parameters, Plots, PlutoUI
-	using Zygote: gradient
-
-	X, y = Data.linreg_toy_data()
-	X = X[:]
-	N = size(X)
-	xlim = -10, 10
-	scatter(
-		X, y, title = "Observed data", 
-		xlabel = "X", ylabel = "y",
-		label = nothing
-	)
-end
-
-# ╔═╡ 50d287fa-720f-11eb-3f79-bddf652bf4da
-
+# ╔═╡ d8f7dde6-744f-11eb-027a-43075e3bf744
+using PlutoUI
 
 # ╔═╡ b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
 md"""
@@ -68,14 +31,11 @@ The `linreg_toy_data` and `GaussianRegression` can be found in `gaussian_linreg.
 
 # ╔═╡ 659f63b2-6ea7-11eb-2333-35d3f51a748c
 begin
-	feature_grid(f, xx) = mapreduce(f, hcat, xx)'
-	step(xx) = x -> feature_grid(x′ -> Int.(x .>= x′), xx)
-	gaussian(xx; θ₁ = 10, θ₂ = 4) = 
-			x -> feature_grid(x′ -> θ₁.*exp.(-(x .- x′).^2)./2θ₂, xx)
-	linear(xx) = x -> feature_grid(x′ -> abs.(x .- x′) .- x′, xx)
-	sigmoid(xx; θ₂ = 1) = 
-			x -> feature_grid(x′ -> 1 ./ (1 .+ exp.(.-(x .- x′)./θ₂)), xx)
-	relu(xx) = x -> feature_grid(x′ -> max.(x, x′), xx)
+	step(θ) = x -> Int.(x' .>= θ)'
+	gaussian(θ) = x -> exp.(-(x' .- θ).^2)'./2	
+	linear(θ) = x -> (abs.(x' .- θ) .- θ)'
+	sigmoid(θ) = x -> 1 ./ (1 .+ exp.(.-(x' .- θ)))'
+	relu(θ) = x -> max.(0,0, x' .- θ)'
 
 	ϕs = Dict(
 		"step functions" => step,
@@ -94,22 +54,9 @@ Remember that the only assumptions we made for the whole inference framework to 
 Feature function $(@bind feature_name Select(collect(keys(ϕs))))
 """
 
-# ╔═╡ 5114873e-6dfc-11eb-0da3-21a6186d9da2
-begin
-	reg₁ = GR.GaussianRegression(
-		X, y, zeros(N), diagm(ones(N)), .5,
-		features(feature_name, X)
-	)
-	xx = collect(range(xlim..., length = 200))
-	GR.plot_features(reg₁, xx)
-end
-
-# ╔═╡ 04ceeabc-7212-11eb-14ca-077d1ba576c1
-
-
 # ╔═╡ 4acd1fa0-6eb3-11eb-15b2-bf84b53f3880
 md"""
-Hopefully you see how flexible the  Gaussian inference framework is. Since we are not tied to any function class we can simply plug in one that is better suited for any particular problem. While we have been limiting ourselves to using features of our input points $\phi(X)$ we are in fact free to use features $\phi(x\prime)$ of any input point $x\prime$ of our choice. You can play around with the slider below to create a grid of features which are used to fit the model to see the impact of this.
+Hopefully you see how flexible the  Gaussian inference framework is. Since we are not tied to any function class we can simply plug in one that is better suited for any particular problem. While we have been limiting ourselves to using features of our input points $\phi(X)$ we are in fact free to use features $\phi(x\prime)$ of any input point $x\prime$ of our choice (you can think of this as as bias term). You can play around with the slider below to create a grid of features which are used to fit the model to see the impact of this.
 
 Number of features $(@bind num_features_input2 Slider(2:25; show_value=true))
 
@@ -169,14 +116,58 @@ So how do we find $\hat \theta$? A simple solution to this is to pick $\theta$ t
 In other words, we minimise the negative log marginal likelihood. Let us do this to find good locations for the location of the feature functions $\theta = x \prime$. 
 A convenient way of doing this is through [gradient descent](https://en.wikipedia.org/wiki/Gradient_descent), which requires us to take gradients of $p(y \vert X, \theta)$ with respect to $\theta$. Luckily, we live in the era of automatic differentiation, and Julia has *great* libraries to this end. We are going to utilize the `gradient` function from the [Zygote](https://fluxml.ai/Zygote.jl/) package to compute the gradient of our loss. On caveat with this is that we cannot differentiate through discontiuities, so the step function features have to go for now. You can use the by now familiar sliders below to fit different features. Note that this optimisation is not convex so you might get stuck in local minima.
 
-Number of features $(@bind input_k3 Slider(2:10; show_value=true))
+Number of features $(@bind input_k3 Slider(2:20; show_value=true))
 
 Feature function $(@bind input_feature3 Select(collect(filter(k-> k != "step functions", keys(ϕs)))))
 """
 
+# ╔═╡ 0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
+md"""
+By maximising the marginal likelihood we are able to learn good features for our data which we can then use to perform Gaussian inference. The learned features are noticably better than the uniformly placed ones, and significantly fewer than assigning one feature per data point. Despite this the posterior captures the data very well.
+
+### Ending notes.
+In this notebook we expanded the notion of Gaussian inference to more flexible function classes by using various feature functions. We also saw an example of feature learning, where we learn the position of the features using type-II maximum likelihood. Even though we only learned the feature positions, we can use the exact same procedure for any hyper-parameter, as long as we can take gradients which is made super easy thanks to automatic differentiation. Indeed, this is the idea that leads us to deep learning.
+"""
+
+# ╔═╡ dca94b3a-7122-11eb-3080-fdbc8581823a
+begin
+	"""This is just to include external files. Please ignore it"""
+	function ingredients(path::String)
+		# this is from the Julia source code (evalfile in base/loading.jl)
+		# but with the modification that it returns the module instead of the last object
+		name = Symbol(basename(path))
+		m = Module(name)
+		Core.eval(m,
+	        Expr(:toplevel,
+	             :(eval(x) = $(Expr(:core, :eval))($name, x)),
+	             :(include(x) = $(Expr(:top, :include))($name, x)),
+	             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
+	             :(include($path))))
+		m
+	end
+	
+	GR = ingredients("../src/gaussian_regression.jl")
+	Data = ingredients("../src/data.jl")
+end
+
+# ╔═╡ 23451f6e-6e1d-11eb-35fb-1b560a12e694
+begin
+	using Random, Distributions, LinearAlgebra, Parameters, Plots
+	using Zygote: gradient
+
+	X, y = Data.linreg_toy_data()
+	#X = X[:]
+	D, N = size(X)
+	xlim = -10, 10
+	scatter(
+		X', y, title = "Observed data", 
+		xlabel = "X", ylabel = "y",
+		label = nothing
+	)
+end
+
 # ╔═╡ f0ef960a-6ecd-11eb-2a55-7d447bea3af4
 begin
-	"""This is actually not exactly the marginal likelihood, but only proportional to it since we dropped the constants. We do not need those for optimisation."""
 	function marginal_likelihood(X, y, μ, Σ, Λ)
 		θ -> begin
 			K = length(θ)
@@ -184,7 +175,7 @@ begin
 			ϕX = ϕ(X)
 			κXX = ϕX'*Σ*ϕX
 			r = y .- ϕX'*μ
-			r'*inv(κXX + Λ)*r + log(det(κXX + Λ))
+			0.5*r'*inv(κXX + Λ)*r + log(det(κXX + Λ)) + 0.5*K*log(2π) 
 		end
 	end
 	
@@ -199,14 +190,24 @@ begin
 	end
 	σ = 0.5
 	K = input_k3
-	θ₀ = collect(range(-10, 10, length = K)) .+ randn(K)
+	θ₀ = collect(range(-10, 10, length = K))' .+ randn(K)'
 	loss = marginal_likelihood(X, y, ones(K), diagm(ones(K)), σ^2*I(length(X)))
 	θ̂, losses = fit(loss, θ₀; steps = 100)
 end;
 
+# ╔═╡ 5114873e-6dfc-11eb-0da3-21a6186d9da2
+begin
+	xx = collect(range(xlim..., length = 200))'
+	reg₁ = GR.GaussianRegression(
+		X, y, zeros(N), diagm(ones(N)), .5,
+		features(feature_name, X)
+	)
+	GR.plot_features(reg₁, xx)
+end
+
 # ╔═╡ 9a7dd170-6eb3-11eb-11a2-23759c9808fe
 begin
-	feature_xx = range(xlim...; length = num_features_input2)
+	feature_xx = range(xlim...; length = num_features_input2)'
 	reg₂ = GR.GaussianRegression(
 		X, y, zeros(num_features_input2),
 		diagm(ones(num_features_input2)), σ,
@@ -223,43 +224,34 @@ begin
 	)
 	
 	pf = GR.posterior_f(reg₃, xx)
-	posterior_plt  = plot(xx, pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
+	posterior_plt  = plot(xx', pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
 		color = 2, label = "p(f | X, y)", legend =:topleft,
 		xlim = xlim, ylim=(-10, 10))
-	scatter!(posterior_plt, X, y, label = "Observations",
+	scatter!(posterior_plt, X', y, label = "Observations",
 		color = 1,
 		title ="Posterior predictive",
 		xlabel = "x", ylabel = "f(x)")
-	scatter!(posterior_plt, θ̂, -9.6 .* ones(length(θ̂)),
+	scatter!(posterior_plt, θ̂', -9.6 .* ones(length(θ̂)),
 		markershape = :uptriangle,
 		label = "Feature locations")
 
 	loss_plt = plot(losses, title = "Loss curve",
-		label = nothing, xlabel = "Iteration", ylabel = "Loss")
+		label = nothing, xlabel = "Iteration", ylabel = "Log marginal likelihood")
 	plot(loss_plt, posterior_plt, layout = (2, 1), size = (600, 600))
 end
 
-# ╔═╡ 0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
-md"""
-By maximising the marginal likelihood we are able to learn good features for our data which we can then use to perform Gaussian inference. The learned features are noticably better than the uniformly placed ones, and significantly fewer than assigning one feature per data point. Despite this the posterior captures the data very well.
-
-### Ending notes.
-In this notebook we expanded the notion of Gaussian inference to more flexible function classes by using various feature functions. We also saw an example of feature learning, where we learn the position of the features using type-II maximum likelihood. Even though we only learned the feature positions, we can use the exact same procedure for any hyper-parameter, as long as we can take gradients which is made super easy thanks to automatic differentiation. Indeed, this is the idea that leads us to deep learning.
-"""
-
 # ╔═╡ Cell order:
-# ╠═dca94b3a-7122-11eb-3080-fdbc8581823a
-# ╠═50d287fa-720f-11eb-3f79-bddf652bf4da
+# ╠═d8f7dde6-744f-11eb-027a-43075e3bf744
 # ╟─b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
-# ╟─23451f6e-6e1d-11eb-35fb-1b560a12e694
+# ╠═23451f6e-6e1d-11eb-35fb-1b560a12e694
 # ╟─0f529eae-6ea5-11eb-280c-9106b55e81fe
 # ╟─659f63b2-6ea7-11eb-2333-35d3f51a748c
-# ╟─5114873e-6dfc-11eb-0da3-21a6186d9da2
-# ╠═04ceeabc-7212-11eb-14ca-077d1ba576c1
+# ╠═5114873e-6dfc-11eb-0da3-21a6186d9da2
 # ╟─4acd1fa0-6eb3-11eb-15b2-bf84b53f3880
-# ╟─9a7dd170-6eb3-11eb-11a2-23759c9808fe
+# ╠═9a7dd170-6eb3-11eb-11a2-23759c9808fe
 # ╟─f93023b0-6eb5-11eb-189a-a7951ec0431e
 # ╟─574db804-6ec0-11eb-205c-65ad68022b58
-# ╟─f0ef960a-6ecd-11eb-2a55-7d447bea3af4
+# ╠═f0ef960a-6ecd-11eb-2a55-7d447bea3af4
 # ╠═f7ae77f2-6ed9-11eb-33f7-db8775acec19
 # ╟─0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
+# ╟─dca94b3a-7122-11eb-3080-fdbc8581823a
