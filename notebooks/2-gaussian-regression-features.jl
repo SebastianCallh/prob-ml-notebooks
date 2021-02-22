@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.20
+# v0.12.21
 
 using Markdown
 using InteractiveUtils
@@ -35,7 +35,7 @@ begin
 	gaussian(θ) = x -> exp.(-(x' .- θ).^2)'./2	
 	linear(θ) = x -> (abs.(x' .- θ) .- θ)'
 	sigmoid(θ) = x -> 1 ./ (1 .+ exp.(.-(x' .- θ)))'
-	relu(θ) = x -> max.(0,0, x' .- θ)'
+	relu(θ) = x -> max.(0., x' .- θ)'
 
 	ϕs = Dict(
 		"step functions" => step,
@@ -121,6 +121,9 @@ Number of features $(@bind input_k3 Slider(2:20; show_value=true))
 Feature function $(@bind input_feature3 Select(collect(filter(k-> k != "step functions", keys(ϕs)))))
 """
 
+# ╔═╡ 27e3d282-74ed-11eb-038e-dd2775b95e81
+
+
 # ╔═╡ 0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
 md"""
 By maximising the marginal likelihood we are able to learn good features for our data which we can then use to perform Gaussian inference. The learned features are noticably better than the uniformly placed ones, and significantly fewer than assigning one feature per data point. Despite this the posterior captures the data very well.
@@ -156,7 +159,6 @@ begin
 	using Zygote: gradient
 
 	X, y = Data.linreg_toy_data()
-	#X = X[:]
 	D, N = size(X)
 	xlim = -10, 10
 	scatter(
@@ -165,35 +167,6 @@ begin
 		label = nothing
 	)
 end
-
-# ╔═╡ f0ef960a-6ecd-11eb-2a55-7d447bea3af4
-begin
-	function marginal_likelihood(X, y, μ, Σ, Λ)
-		θ -> begin
-			K = length(θ)
-			ϕ = features(input_feature3, θ)
-			ϕX = ϕ(X)
-			κXX = ϕX'*Σ*ϕX
-			r = y .- ϕX'*μ
-			0.5*r'*inv(κXX + Λ)*r + log(det(κXX + Λ)) + 0.5*K*log(2π) 
-		end
-	end
-	
-	function fit(loss, θ; steps, α = 0.001)
-		losses = zeros(steps)
-		for i in 1:steps
-			losses[i] = loss(θ)
-			g = gradient(loss, θ)[1]
-			θ -= α*g
-		end
-		θ, losses
-	end
-	σ = 0.5
-	K = input_k3
-	θ₀ = collect(range(-10, 10, length = K))' .+ randn(K)'
-	loss = marginal_likelihood(X, y, ones(K), diagm(ones(K)), σ^2*I(length(X)))
-	θ̂, losses = fit(loss, θ₀; steps = 100)
-end;
 
 # ╔═╡ 5114873e-6dfc-11eb-0da3-21a6186d9da2
 begin
@@ -205,6 +178,35 @@ begin
 	GR.plot_features(reg₁, xx)
 end
 
+# ╔═╡ 7d4fae44-74ed-11eb-254e-f7bde69e6eee
+md"""
+Model log evidence: $(GR.log_evidence(reg₁))
+"""
+
+# ╔═╡ f0ef960a-6ecd-11eb-2a55-7d447bea3af4
+begin
+	function fit(loss, θ; steps, α = 0.001)
+		losses = zeros(steps)
+		for i in 1:steps
+			losses[i] = loss(θ)
+			g = gradient(loss, θ)[1]
+			θ -= α*g
+		end
+		θ, losses
+	end
+	
+	K = input_k3
+	σ = 0.5
+	μ = zeros(K)
+	Σ = diagm(ones(K))
+	ϕ = ϕs[input_feature3]
+	θ₀ = collect(range(-10, 10, length = K))' .+ randn(K)'
+	θ̂, losses = fit(
+		θ -> -GR.log_evidence(GR.GaussianRegression(X, y, μ, Σ, σ, ϕ(θ))), 
+		θ₀; steps = 100
+	)
+end;
+
 # ╔═╡ 9a7dd170-6eb3-11eb-11a2-23759c9808fe
 begin
 	feature_xx = range(xlim...; length = num_features_input2)'
@@ -215,6 +217,11 @@ begin
 	)
 	GR.plot_features(reg₂, xx)
 end
+
+# ╔═╡ 4f3a8702-74ed-11eb-1732-bf79fe482cec
+md"""
+Model log evidence: $(GR.log_evidence(reg₂))
+"""
 
 # ╔═╡ f7ae77f2-6ed9-11eb-33f7-db8775acec19
 begin
@@ -245,13 +252,16 @@ end
 # ╟─b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
 # ╠═23451f6e-6e1d-11eb-35fb-1b560a12e694
 # ╟─0f529eae-6ea5-11eb-280c-9106b55e81fe
-# ╟─659f63b2-6ea7-11eb-2333-35d3f51a748c
+# ╠═659f63b2-6ea7-11eb-2333-35d3f51a748c
+# ╟─7d4fae44-74ed-11eb-254e-f7bde69e6eee
 # ╠═5114873e-6dfc-11eb-0da3-21a6186d9da2
 # ╟─4acd1fa0-6eb3-11eb-15b2-bf84b53f3880
+# ╟─4f3a8702-74ed-11eb-1732-bf79fe482cec
 # ╠═9a7dd170-6eb3-11eb-11a2-23759c9808fe
 # ╟─f93023b0-6eb5-11eb-189a-a7951ec0431e
 # ╟─574db804-6ec0-11eb-205c-65ad68022b58
-# ╠═f0ef960a-6ecd-11eb-2a55-7d447bea3af4
-# ╠═f7ae77f2-6ed9-11eb-33f7-db8775acec19
+# ╟─f0ef960a-6ecd-11eb-2a55-7d447bea3af4
+# ╟─f7ae77f2-6ed9-11eb-33f7-db8775acec19
+# ╠═27e3d282-74ed-11eb-038e-dd2775b95e81
 # ╟─0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
 # ╟─dca94b3a-7122-11eb-3080-fdbc8581823a

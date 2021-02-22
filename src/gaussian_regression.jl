@@ -2,7 +2,7 @@ using Random, Distributions, LinearAlgebra, Parameters, Plots
 include("utils.jl")
 
 @with_kw struct GaussianRegression{F,T <: Real}
-    X::Vector{T}
+    X::Matrix{T}
     y::Vector{T}
     μ::Vector{T}
     Σ::Matrix{T}
@@ -49,12 +49,25 @@ function posterior_f(reg::GaussianRegression, x)
     MvNormal(μₙ, Σₙ)
 end
 
+"""The evidence term is the marginal likelihood and
+the optimisation target for type-II maximum likelihood."""
+function log_evidence(reg::GaussianRegression)
+    @unpack X, y, μ, Σ, σ, ϕ = reg
+    N = size(X, 2)
+    Λ = σ^2 .* I(N)
+    N = length(X)
+    ϕX = ϕ(X)
+    κXX = ϕX' * Σ * ϕX
+    r = y .- ϕX' * μ
+    -0.5 * r' * inv(κXX + Λ) * r - log(det(κXX + Λ)) + 0.5 * N * log(2π)
+end
+
 function plot_features(reg::GaussianRegression, xx)
     @unpack X, y = reg
     pf₀ = prior_f(reg, xx)
     fs = rand(pf₀, 5)
     prior_plt = plot(
-        xx, pf₀.μ, ribbon=2 * sqrt.(diag(pf₀.Σ)),
+        xx', pf₀.μ, ribbon=2 * sqrt.(diag(pf₀.Σ)),
         title="Prior predictive",
         xlabel="x",
         ylabel="f(x)",
@@ -63,21 +76,21 @@ function plot_features(reg::GaussianRegression, xx)
     )
     for (i, f) in enumerate(eachcol(fs))
         plot!(
-            prior_plt, xx, f, color=3,
+            prior_plt, xx', f, color=3,
             label=i == 1 ? "Prior sample" : nothing
         )
     end
 
-    scatter!(prior_plt, X, y, label="Observations", color=1)
+    scatter!(prior_plt, X', y, label="Observations", color=1)
 
     pfₙ = posterior_f(reg, xx)
     posterior_plt  = plot(
-        xx, pfₙ.μ, ribbon=2 * sqrt.(diag(pfₙ.Σ)),
+        xx', pfₙ.μ, ribbon=2 * sqrt.(diag(pfₙ.Σ)),
         color=2,
         label="p(f | X, y)", legend=:topleft
     )
     scatter!(
-        posterior_plt, X, y, label="Observations",
+        posterior_plt, X', y, label="Observations",
         color=1,
         title="Posterior predictive",
         xlabel="x", ylabel="f(x)"
