@@ -55,14 +55,13 @@ function log_evidence(reg::GaussianRegression)
     @unpack X, y, μ, Σ, σ, ϕ = reg
     N = size(X, 2)
     Λ = σ^2 .* I(N)
-    N = length(X)
     ϕX = ϕ(X)
     κXX = ϕX' * Σ * ϕX
     r = y .- ϕX' * μ
     -0.5 * r' * inv(κXX + Λ) * r - log(det(κXX + Λ)) + 0.5 * N * log(2π)
 end
 
-function plot_features(reg::GaussianRegression, xx)
+function plot_features(reg::GaussianRegression, xx, ylim, xlim)
     @unpack X, y = reg
     pf₀ = prior_f(reg, xx)
     fs = rand(pf₀, 5)

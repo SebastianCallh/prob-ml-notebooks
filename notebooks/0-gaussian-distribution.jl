@@ -4,31 +4,27 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ d1aa571a-715e-11eb-0a16-6bd5dc31a045
-using Distributions, Plots
-
 # ╔═╡ 1744c326-715c-11eb-14ce-5d1a589900e5
 md"""
 
 # Introduction
 Probabilistic machine learning is tricky. Both intellectually and computationally. One of the most powerful tools we have at our disposal for building probabilistic machine learning model is the Gaussian distribution. I 
 
+
 [Probabilistic Machine Learning: An Introduction](https://probml.github.io/pml-book/book1.html).
 
 [Probabilistic ML - Lecture 6 - Gaussian Distributions](https://www.youtube.com/watch?v=FIheKQ55l4c&list=PL05umP7R6ij1tHaOFY96m5uX3J21a6yNd&index=7)
-
-## Properties of the Gaussian distribution
-Please note that we are going to be talking about Gaussian *distributions* and not realisations of one.
-
-### Closed under addition
 
 """
 
 # ╔═╡ ef6ea2e2-715e-11eb-0eea-17884c509b75
 md"""
-Gaussian distributions have a *ton* of structure. 
 
-## Probability density function
+## The Gaussian distribution
+What makes the Gaussian so useful? It happens to have have a *ton* of structure to it. And we can use all this structure to create efficient inference algorithms.
+Please note that we are going to be talking about Gaussian *distributions* and not realisations of one. 
+
+### Probability density function
 The pdf of the Gaussian is given by
 ```math
 \mathcal{N}(\boldsymbol{x}; \boldsymbol{\mu}, \Sigma) =
@@ -155,7 +151,6 @@ which instead requires inverting a $D \times D$ matrix.
 """
 
 # ╔═╡ Cell order:
-# ╠═d1aa571a-715e-11eb-0a16-6bd5dc31a045
-# ╠═1744c326-715c-11eb-14ce-5d1a589900e5
+# ╟─1744c326-715c-11eb-14ce-5d1a589900e5
 # ╠═ef6ea2e2-715e-11eb-0eea-17884c509b75
-# ╠═70d14e2c-7162-11eb-3100-31a53fdef929
+# ╟─70d14e2c-7162-11eb-3100-31a53fdef929

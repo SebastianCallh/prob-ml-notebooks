@@ -121,9 +121,6 @@ Number of features $(@bind input_k3 Slider(2:20; show_value=true))
 Feature function $(@bind input_feature3 Select(collect(filter(k-> k != "step functions", keys(ϕs)))))
 """
 
-# ╔═╡ 27e3d282-74ed-11eb-038e-dd2775b95e81
-
-
 # ╔═╡ 0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
 md"""
 By maximising the marginal likelihood we are able to learn good features for our data which we can then use to perform Gaussian inference. The learned features are noticably better than the uniformly placed ones, and significantly fewer than assigning one feature per data point. Despite this the posterior captures the data very well.
@@ -189,8 +186,8 @@ begin
 		losses = zeros(steps)
 		for i in 1:steps
 			losses[i] = loss(θ)
-			g = gradient(loss, θ)[1]
-			θ -= α*g
+			∇θ = first(gradient(loss, θ))
+			θ -= α*∇θ
 		end
 		θ, losses
 	end
@@ -226,12 +223,12 @@ Model log evidence: $(GR.log_evidence(reg₂))
 # ╔═╡ f7ae77f2-6ed9-11eb-33f7-db8775acec19
 begin
 	reg₃ = GR.GaussianRegression(
-		X, y, zeros(K), diagm(ones(K)), σ,
+		X, y, μ, Σ, σ,
 		features(input_feature3, θ̂)
 	)
 	
 	pf = GR.posterior_f(reg₃, xx)
-	posterior_plt  = plot(xx', pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
+	posterior_plt = plot(xx', pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
 		color = 2, label = "p(f | X, y)", legend =:topleft,
 		xlim = xlim, ylim=(-10, 10))
 	scatter!(posterior_plt, X', y, label = "Observations",
@@ -249,7 +246,7 @@ end
 
 # ╔═╡ Cell order:
 # ╠═d8f7dde6-744f-11eb-027a-43075e3bf744
-# ╟─b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
+# ╠═b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
 # ╠═23451f6e-6e1d-11eb-35fb-1b560a12e694
 # ╟─0f529eae-6ea5-11eb-280c-9106b55e81fe
 # ╠═659f63b2-6ea7-11eb-2333-35d3f51a748c
@@ -260,8 +257,7 @@ end
 # ╠═9a7dd170-6eb3-11eb-11a2-23759c9808fe
 # ╟─f93023b0-6eb5-11eb-189a-a7951ec0431e
 # ╟─574db804-6ec0-11eb-205c-65ad68022b58
-# ╟─f0ef960a-6ecd-11eb-2a55-7d447bea3af4
-# ╟─f7ae77f2-6ed9-11eb-33f7-db8775acec19
-# ╠═27e3d282-74ed-11eb-038e-dd2775b95e81
+# ╠═f0ef960a-6ecd-11eb-2a55-7d447bea3af4
+# ╠═f7ae77f2-6ed9-11eb-33f7-db8775acec19
 # ╟─0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
 # ╟─dca94b3a-7122-11eb-3080-fdbc8581823a

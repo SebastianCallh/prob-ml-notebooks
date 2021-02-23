@@ -28,9 +28,6 @@ begin
 		label = nothing, xlabel = "X", ylabel = "y")
 end
 
-# ╔═╡ 67c6886a-6a4b-11eb-377b-278d91b6d03f
-
-
 # ╔═╡ b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
 md"""
 ## Gaussian regression
@@ -254,7 +251,6 @@ We also saw how the model is surprisingly overconfident. This can be explained b
 """
 
 # ╔═╡ Cell order:
-# ╟─67c6886a-6a4b-11eb-377b-278d91b6d03f
 # ╠═b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
 # ╠═23451f6e-6e1d-11eb-35fb-1b560a12e694
 # ╠═79934a56-6e1c-11eb-0728-1b6a25618285
