@@ -16,25 +16,20 @@ end
 # ╔═╡ a2ac2eac-7111-11eb-2101-b198c13d3f5f
 md"""
 # Deep learning from a probabilistic perspective
-We saw in the previous notebook that we can use type-II maximum likelihood to learn parmaeters $\theta$ of our feature function $\phi$. Idealy we would like to marginalise over them, but due to computational constraints we resort to point-estimates. That's all well and good, but perhaps it is not expressive enough for very complex data. In such a situation we might want to look at deep learning.
+We saw in the previous notebook that we can use type-II maximum likelihood to learn parmaeters $\thete$ of our feature function $\phi$. Idealy we would like to marginalise over them, but due to computational constraints we resort to point-estimates. That's all well and good, but perhaps it is not expressive enough for very complex data. In such a situation we might want to look at deep learning.
 
 ### Neural networks are feature function learners
 There are a lot of moving pieces when training modern neural networks, and a lot of empirical work has been done on how to properly mix stochastic optimizers, batch normalisation, self-attention, weight decay etc. to train good neural networks. In this notebook we are going to see that below all the complexities lies a very simple structure, which approximates (albeit crudely) the Bayesian posterior over the neural network weights.
 
 Deep learning is at it's core very similar to what we have done previously, and also assumes that the target function can be represented by a linear combination of a set of feature functions $y = \phi(x; \theta)^Tw$. However, the way features are computed is more sophisticated. Instead of learning a single feature function $\phi(x; \theta)^Tw$ we learn a composition of $\ell$ features $\phi_\ell = \phi_\ell(x; \theta_\ell)^T$. To see this let us fit a small neural network on our toy data.
-Recall that $X \in \mathbb{R}^{D \times N}$ is the data matrix with $N$ observations of dimension $D$ and $\mathbf{y} \in \mathbb{R}^N$ the observed values.
+We are going to use the same setting as in the previous notebook. Recall that $X \in \mathbb{R}^{D \times N}$ is the data matrix with $N$ observations of dimension $D$ and $\mathbf{y} \in \mathbb{R}^N$ the observed values.
 
 [Probabilistic ML - Lecture 8 - Learning Representations](https://www.youtube.com/watch?v=Zb0K_S5JJU4&t=1142s)
 """
 
-# ╔═╡ 793fc384-75ec-11eb-325e-a5982d91d954
-md"""
-Number of features $(@bind K Slider(10:10:100; show_value=true))
-"""
-
 # ╔═╡ f88bc10a-75cf-11eb-001b-35d72fde997b
 md"""
-As we might expect, the prior induced by the neural network is extremely flexible (observe the scale on the y-axis) and it fits the data without issues. In this example we only learn the locations of the featues, but we could of course learn both weights and any specific parameters for the individual $\phi_\ell$ in the same fashion.
+As we might expect, the prior induced by the neural network is extremely flexible (observe the scale on the y-axis) and it fits the data without issues. In this example we only learn the locations of the featues, but we could imagine learning both multiplicative weights and specific parameters for the individual $\phi_\ell$ in the same fashion.
 """
 
 # ╔═╡ 4b90cb7e-6f00-11eb-2fe7-af7d99ad7ed9
@@ -93,13 +88,6 @@ recovers a uniform prior over $\theta$ and the maximum likelihood estimate. You 
 
 σ₀ $(@bind input_σ₀ Slider(0.5:0.1:3; default=0.5, show_value=true)) 
 
-"""
-
-# ╔═╡ 82be2a6a-75ea-11eb-2076-5b651ffb2782
-md"""
-### Ending notes
-While deep learning and probabilistic machine laerning might seem like separate worlds, we have seen that deep learning has a clear probabilistic interpretation as a hierarchial Bayesian model where we parameterise many stacked feature functions and find the MAP posterior estimate.
-We also saw how weight decay, commonly used when training deep networks can be interpreted as the ratio between a prior variance and observation noise.
 """
 
 # ╔═╡ 278e0f08-6fbd-11eb-25e8-5b73d8d7ed6d
@@ -184,6 +172,37 @@ begin
 	plot(prior_plt)	
 end
 
+# ╔═╡ 0fe3637e-73c0-11eb-30c0-9daf35a802cf
+begin
+	for i in 1:10
+		L = marginal_likelihood(
+			Matrix(X'), y, zeros(1), 
+			diagm(ones(1)), 0.1.*I(N), ϕnn
+		)
+		L(Ws, bs) = begin
+			Σ = diagm(ones(1))
+			Λ = 0.1.*I(N)
+			μ = zeros(1)
+			ϕX = ϕnn(X', Ws, bs)
+			κXX = ϕX'*Σ*ϕX
+			# @show size(κXX)
+			r = y .- ϕX'*μ
+			a = κXX + Λ
+			loss = r'*inv(a)*r + log(det(a))
+			e = loss #log(det(κXX + Λ))
+			@show e
+			e
+		end
+		
+		∇Ws, ∇bs = gradient(L, Ws, bs)
+		@show ∇Ws, ∇bs  
+		for (W, b, ∇W, ∇b) in zip(Ws, bs, ∇Ws, ∇bs)
+			W .-= 0.1*∇W
+			b .-= 0.1*∇b
+		end
+	end
+end
+
 # ╔═╡ aba3a4be-7450-11eb-2a00-6581be94dcec
 begin
 	function fit(loss, θ; steps, α = 0.001)
@@ -207,7 +226,7 @@ begin
 		end
 	end
 	
-	
+	K = 10
 	σ = 0.5
 	μ = zeros(K)
 	Σ = diagm(ones(K))
@@ -221,9 +240,7 @@ begin
 		θ -> -GR.log_evidence(GR.GaussianRegression(X, y, μ, Σ, σ, ϕ(relu, θ))), 
 		θ₀; steps = 100
 	)
-	plot(losses, title = "Loss curve", xlabel = "Iterations",
-		ylabel = "Neg. log marginal likelihood",
-		legend = false)
+	plot(losses)
 end
 
 # ╔═╡ 2f28b3e6-7466-11eb-1427-c94e7d886152
@@ -250,11 +267,11 @@ begin
 	
 	pf = GR.posterior_f(reg, xx)
 	posterior_nn_plt = plot(xx', pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
-		color = 2, label = "p(f | X, y)", legend =:topleft,
+		color = 1, label = "p(f | X, y)", legend =:topleft,
 		xlim = xlim, ylim = (-10, 10))
 	for (i, f) in enumerate(eachcol(rand(pf, 5)))
         plot!(
-            posterior_nn_plt, xx', f, color=2,
+            posterior_nn_plt, xx', f, color=3,
             label=i == 1 ? "Posterior sample" : nothing
         )
     end
@@ -272,16 +289,15 @@ Log evidence: $(GR.log_evidence(reg))
 """
 
 # ╔═╡ Cell order:
-# ╟─a2ac2eac-7111-11eb-2101-b198c13d3f5f
+# ╠═a2ac2eac-7111-11eb-2101-b198c13d3f5f
 # ╠═c72a0ccc-711d-11eb-1be5-bf22fa41f863
-# ╟─793fc384-75ec-11eb-325e-a5982d91d954
-# ╟─b8e5bd12-75cf-11eb-19df-379c49419514
 # ╠═aba3a4be-7450-11eb-2a00-6581be94dcec
+# ╟─b8e5bd12-75cf-11eb-19df-379c49419514
 # ╠═2f28b3e6-7466-11eb-1427-c94e7d886152
 # ╠═f88bc10a-75cf-11eb-001b-35d72fde997b
-# ╟─4b90cb7e-6f00-11eb-2fe7-af7d99ad7ed9
-# ╟─d9caa89e-6f0d-11eb-2242-47baa342e9a9
-# ╠═82be2a6a-75ea-11eb-2076-5b651ffb2782
+# ╠═4b90cb7e-6f00-11eb-2fe7-af7d99ad7ed9
+# ╠═d9caa89e-6f0d-11eb-2242-47baa342e9a9
 # ╠═278e0f08-6fbd-11eb-25e8-5b73d8d7ed6d
 # ╠═e4d8c4f6-6f04-11eb-2396-ede262fdb6f3
+# ╠═0fe3637e-73c0-11eb-30c0-9daf35a802cf
 # ╠═b33a7252-7123-11eb-19a4-bbdd32955f2d
