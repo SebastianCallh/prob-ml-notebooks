@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.20
+# v0.12.21
 
 using Markdown
 using InteractiveUtils
@@ -31,14 +31,14 @@ end
 # ╔═╡ b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
 md"""
 ## Gaussian regression
-Probabilistic inference is generally computationally difficult. But if we can assume that our quantities of interest follow a Gaussian distribution, inference reduces to linear algebra operations. In this notebook we are going to look at how to perform regression using this framework. Since there is a quite a bit of maths involved, we will start with a simple linear regression to not introduce too many moving pieces. Our data is given by the data matrix $X \in \mathbb{R}^{D \times N}$ with $N$ observations of dimension $D$ and the observed values $\mathbf{y} \in \mathbb{R}^N$.
+Probabilistic inference is generally computationally difficult, but in the previous notebook we saw that if we can assume that our quantities of interest follow Gaussian distributions, and are linearly related, inference reduces to tractabel linear algebra operations. In this notebook we are going to look at how to perform regression using this framework. To keep things simple we will start with a linear regression before moving on to non-linear releations. Our data is given by the data matrix $X \in \mathbb{R}^{D \times N}$ with $N$ observations of dimension $D$ and the observed values $\mathbf{y} \in \mathbb{R}^N$.
 
 [Probabilistic ML - Lecture 7 - Gaussian Parametric Regression](https://www.youtube.com/watch?v=EF1BfKnINw0&t=3210s)
 """
 
 # ╔═╡ 79934a56-6e1c-11eb-0728-1b6a25618285
 md"""
-We assume the model $y(x) = \phi_x^T w$ where $\phi_x = \phi(x) : \mathbb{R}^N \mapsto \mathbb{R}^K$ is the *feature function* evaluated at $x$ and $w$ the model weights. In the case of a linear model this means $\phi_x = \left(1, x \right)^T$. We also assume the model weights \$w$ to be Gaussian with prior $p(w) = \mathcal{N}(w; \mu, \Sigma)$, and finally
+The data is clearly not linear, but for now let us assume the model $y(x) = \phi_x^T w$ where $\phi_x = \phi(x) : \mathbb{R}^N \mapsto \mathbb{R}^K$ is the *feature function* evaluated at $x$ and $w \in \mathbb{R}^K$ the model weights. To express linear regression we let $\phi_x = \left(1, x \right)^T$. We also assume the model weights \$w$ to be Gaussian with prior $p(w) = \mathcal{N}(w; \mu, \Sigma)$, and finally
 we assume a Gaussian likelihood
 $p(y \vert w, \phi_X) = \mathcal{N}(y; \phi_X^T w, \sigma^2I)$ with (known) independent observation noise $\sigma^2$. 
 
@@ -116,10 +116,10 @@ p(f_x \vert w, \phi_X) = \mathcal{N}(f_x;
 \end{equation}
 ```
 
-The above expressions may look a bit overwhelming, but at the end of the day they are just linear algebra. In fact, what we have here is a rare unicorn of a posterior which we are able to write down an expression for. Even though we have to multiply a bunch of vectors and invert some matrices to get it, it is very cool that it is possible at all.
+The above expressions may look a bit overwhelming, but at the end of the day they are just linear algebra. In fact, what we have here is a rare unicorn of a posterior which we are able to write down an expression for. Even though we have to multiply a bunch of vectors and invert some matrices to get it, it is very nice that it is possible at all.
 
 #### Alterative parametrisation
-We can also invoke the [matrix inversion lemma](https://en.wikipedia.org/wiki/Woodbury_matrix_identity) and express the posterior over weights as
+We can also invoke the [matrix inversion lemma](https://en.wikipedia.org/wiki/Woodbury_matrix_identity) (aka. the Woodbury formula) and express the posterior over weights as
 ```math
 \begin{equation}
 \begin{split}
@@ -142,13 +142,13 @@ p(f_x \vert \mathbf{y}, \phi_X) = \mathcal{N}(w;
 \end{equation}
 ```
 This is useful since $\phi_X^T \Sigma \phi_X$ is $N \times N$ while 
-$\Sigma^{-1} + \sigma^{-2} \phi_X^T \phi_X$ is $K \times  K$. When the number of  features is smaller than the number of observation (which is not unlikely) the second parametrisation is more efficient. Finally, to clear up notation, let us denote the inner products and the residual between the observations and prior predictions as
+$\Sigma^{-1} + \sigma^{-2} \phi_X^T \phi_X$ is $K \times  K$. When the number of  features is smaller than the dimensionality of the data the second parametrisation is more efficient. Finally, to clear up notation, let us denote the inner products and the residual between the observations and prior predictions as
 
 ```math
 \begin{equation}
 \begin{split}
 \kappa_{ab} = & \phi_a^T \Sigma\phi_b \\
-\mathbf{r}  = & \mathbf{y} - \phi_X^T \mu
+r  = & y - \phi_X^T \mu
 \end{split}
 \end{equation}
 ```
@@ -158,12 +158,12 @@ which lets us express the posterior over functions as
 \begin{equation}
 \begin{split}
 p(f_x \vert w, \phi_X) = \mathcal{N}(f_x; 
-& \phi_x^T \mu + \kappa_{xX}(\kappa_{XX} + \sigma^2 I)^{-1} \mathbf{r}, \\
+& \phi_x^T \mu + \kappa_{xX}(\kappa_{XX} + \sigma^2 I)^{-1} r, \\
 & \kappa_{xx} - \kappa_{xX} (\kappa_{XX} + \sigma^2 I)^{-1}\kappa_{Xx}.
 \end{split}
 \end{equation}
 ```
-Let us now use identities to compute the posterior.
+Let us use these identities to compute the posterior.
 """
 
 # ╔═╡ 6f01a140-6ef2-11eb-3bf1-cb378acd4bab
@@ -230,8 +230,8 @@ begin
 	wμₙ, wΣₙ = posterior_w(X, y)
 	w_plots = map(enumerate(zip(wμₙ, diag(wΣₙ)))) do (i, (μ, σ))
 		density = pdf(Normal(μ, σ), xx_w)
-		plot(xx_w, density, label = "p(w$(i) | X, y))",
-		 	title = i == 1 ? "Weight posterior" : "",
+		plot(xx_w, density, label = "p(w$(i) | X, y)",
+		 	title = i == 1 ? "Posterior weights" : "",
 			xlabel = "w$(i)", ylabel = "p(w$(i))"
 		)
 	end
@@ -245,9 +245,11 @@ md"""
 The function posterior plot show us that both identities indeed produce the same posterior. And while the posterior makes sense, it does not capture the data particularly well. As seen in the posterior over the weights, the model is very(!) confident. There is clearly room for improvement in our modelling, but there is only so much we can do with a line.
 	
 ### Ending notes
-We have seen how to infer model weights $w$ in closed form using Gaussian distributions. We saw two identities for this, one that is more efficient when the number of parameters is larger than the number of observations, and one that is more efficient when the opposite is true.
+We have seen how it is possibel to perform linear regression and learn model weights $w$ in closed form using Gaussian distributions. We saw two identities for this, one that is more efficient when the number of features is larger than the dimensionality hof the data, and one that is more efficient when the opposite is true.
 
-We also saw how the model is surprisingly overconfident. This can be explained by the fact that the posterior uncertainty does not depend on observations $y$, but only on $x$. Theere is simply no information about predictions being far away from observed values that can be taken into account. While we used a linear regression, the only requirement we had was that the model was linear *in the weights*. In the next notebook we are going to make use of this to greatly improve the model fit.
+We also saw how the resulting model is surprisingly overconfident. This can be explained by the fact that the posterior uncertainty does not depend on observations $y$, but only on $x$. There is simply no information about predictions being far away from observed values that can be taken into account. 
+
+Finally, while we used a linear regression, the only requirement we had was that the model was linear *in the weights*. In the next notebook we are going to see how to make the model much more flexibel by using different feature functions $\phi$.
 """
 
 # ╔═╡ Cell order:
@@ -255,7 +257,7 @@ We also saw how the model is surprisingly overconfident. This can be explained b
 # ╠═23451f6e-6e1d-11eb-35fb-1b560a12e694
 # ╠═79934a56-6e1c-11eb-0728-1b6a25618285
 # ╠═5114873e-6dfc-11eb-0da3-21a6186d9da2
-# ╟─e3c39cb8-6e11-11eb-1931-eb71caa59a07
+# ╠═e3c39cb8-6e11-11eb-1931-eb71caa59a07
 # ╠═6f01a140-6ef2-11eb-3bf1-cb378acd4bab
 # ╠═2d893066-6e1b-11eb-147a-8f5062800b8d
 # ╠═0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6

@@ -13,23 +13,117 @@ macro bind(def, element)
     end
 end
 
+# ╔═╡ b33a7252-7123-11eb-19a4-bbdd32955f2d
+begin
+	using PlutoUI
+	"""This is just to include external files. Please ignore it"""
+	function ingredients(path::String)
+		# this is from the Julia source code (evalfile in base/loading.jl)
+		# but with the modification that it returns the module instead of the last object
+		name = Symbol(basename(path))
+		m = Module(name)
+		Core.eval(m,
+	        Expr(:toplevel,
+	             :(eval(x) = $(Expr(:core, :eval))($name, x)),
+	             :(include(x) = $(Expr(:top, :include))($name, x)),
+	             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
+	             :(include($path))))
+		m
+	end
+	
+	Data = ingredients("../src/data.jl")
+	GR = ingredients("../src/gaussian_regression.jl")
+end
+
+# ╔═╡ c72a0ccc-711d-11eb-1be5-bf22fa41f863
+begin
+	using Random, Distributions, LinearAlgebra, Parameters, Plots
+	using Zygote: gradient
+	Random.seed!(1231245)
+	
+	X, y = Data.linreg_toy_data()
+	D, N = size(X)
+	xlim = (-10, 10)
+	scatter(X', y, title = "Observed data", 
+		xlabel = "X", ylabel = "y",
+		label = nothing
+	)
+end
+
 # ╔═╡ a2ac2eac-7111-11eb-2101-b198c13d3f5f
 md"""
 # Deep learning from a probabilistic perspective
-We saw in the previous notebook that we can use type-II maximum likelihood to learn parmaeters $\theta$ of our feature function $\phi$. Idealy we would like to marginalise over them, but due to computational constraints we resort to point-estimates. That's all well and good, but perhaps it is not expressive enough for very complex data. In such a situation we might want to look at deep learning.
+We saw in the previous notebook that we can use type-II maximum likelihood to learn parameters $\theta$ of feature functions $\phi$. Idealy we would like to marginalise over them, but due to computational constraints we resort to point-estimates. That's all well and good, but perhaps it is not expressive enough for very complex data. How to further improve the expressiveness of our model? Well, what it we compute *features for the features*? This is the question that leads us to deep learning.
+
+
+Relevant lecture: [Probabilistic ML - Lecture 8 - Learning Representations](https://www.youtube.com/watch?v=Zb0K_S5JJU4&t=1142s)
 
 ### Neural networks are feature function learners
-There are a lot of moving pieces when training modern neural networks, and a lot of empirical work has been done on how to properly mix stochastic optimizers, batch normalisation, self-attention, weight decay etc. to train good neural networks. In this notebook we are going to see that below all the complexities lies a very simple structure, which approximates (albeit crudely) the Bayesian posterior over the neural network weights.
+There are a lot of moving pieces when training modern neural networks, and a lot of empirical work has been done on how to combine stochastic optimizers, batch normalisation, self-attention, weight decay etc. to produce good models. In this notebook we are going to see that underneath all the complexities lies a very simple structure, which approximates (albeit crudely) the Bayesian posterior over the neural network weights.
 
 Deep learning is at it's core very similar to what we have done previously, and also assumes that the target function can be represented by a linear combination of a set of feature functions $y = \phi(x; \theta)^Tw$. However, the way features are computed is more sophisticated. Instead of learning a single feature function $\phi(x; \theta)^Tw$ we learn a composition of $\ell$ features $\phi_\ell = \phi_\ell(x; \theta_\ell)^T$. To see this let us fit a small neural network on our toy data.
 Recall that $X \in \mathbb{R}^{D \times N}$ is the data matrix with $N$ observations of dimension $D$ and $\mathbf{y} \in \mathbb{R}^N$ the observed values.
 
-[Probabilistic ML - Lecture 8 - Learning Representations](https://www.youtube.com/watch?v=Zb0K_S5JJU4&t=1142s)
 """
 
 # ╔═╡ 793fc384-75ec-11eb-325e-a5982d91d954
 md"""
 Number of features $(@bind K Slider(10:10:100; show_value=true))
+"""
+
+# ╔═╡ aba3a4be-7450-11eb-2a00-6581be94dcec
+begin
+	function fit(loss, θ; steps, α = 0.001)
+		losses = zeros(steps)
+		for i in 1:steps
+			losses[i] = loss(θ)
+			∇θ = first(gradient(loss, θ))
+			θ -= α*∇θ
+		end
+		θ, losses
+	end
+	
+	relu(θ) = x -> max.(0., x' .- θ)'
+
+	function nn(f, Ws)
+		x -> begin
+			for W in Ws
+				x = f(W)(x)
+			end
+			x
+		end
+	end
+	
+	
+	σ = 0.5
+	μ = zeros(K)
+	Σ = diagm(ones(K))
+	ϕ = nn
+	θ₀ = [
+		collect(range(-10, 10, length = K))',
+		collect(range(-10, 10, length = K))',
+		collect(range(-10, 10, length = K))',
+	]
+	θ̂, losses = fit(
+		θ -> -GR.log_evidence(GR.GaussianRegression(X, y, μ, Σ, σ, ϕ(relu, θ))), 
+		θ₀; steps = 100
+	)
+	plot(losses, title = "Loss curve", xlabel = "Iterations",
+		ylabel = "Neg. log marginal likelihood",
+		legend = false)
+end
+
+# ╔═╡ fe881ea4-7a7b-11eb-3c2f-e9537b3c4a96
+begin
+	ylim = -12, 12
+	xx = collect(range(-8, 8, length = 500))'
+	reg = GR.GaussianRegression(X, y, μ, Σ, σ, ϕ(relu, θ̂))
+	GR.plot_features(reg, xx, θ̂[begin], xlim, ylim)
+end
+
+# ╔═╡ b8e5bd12-75cf-11eb-19df-379c49419514
+md"""
+Log evidence: $(GR.log_evidence(reg))
 """
 
 # ╔═╡ f88bc10a-75cf-11eb-001b-35d72fde997b
@@ -95,82 +189,6 @@ recovers a uniform prior over $\theta$ and the maximum likelihood estimate. You 
 
 """
 
-# ╔═╡ 82be2a6a-75ea-11eb-2076-5b651ffb2782
-md"""
-### Ending notes
-While deep learning and probabilistic machine laerning might seem like separate worlds, we have seen that deep learning has a clear probabilistic interpretation as a hierarchial Bayesian model where we parameterise many stacked feature functions and find the MAP posterior estimate.
-We also saw how weight decay, commonly used when training deep networks can be interpreted as the ratio between a prior variance and observation noise.
-"""
-
-# ╔═╡ 278e0f08-6fbd-11eb-25e8-5b73d8d7ed6d
-md"""
-### What about classification?
-The above case only covered regression, but neural networks see heavy use for 
-classification. So is there a Bayesian interpretation of classification? I don't know, does it?
-
-What differs is the likelihood which in the case of classification is assumed to be 
-$y \vert x, \theta \sim \mathcal{C}(\pi \vert x, \theta)$
-```math
-\pi = \text{Softmax}(f_\theta(x)) = \frac{\exp(f_\theta(x))}{\sum_{i=1}^K (\exp f\theta(x_i))}
-```
-maps the model output onto the $K$-simplex. Our likelihood function is now given by
-```math
-p(y \vert x \theta) = \prod_{i=1}^K y_i^{\alpha_i-1}
-```
-
-We typically minimise the Cross-Entropy
-```math
-H(p,q) = -\mathbb{E}_p(\log q)
-```
-which when $p = q = \mathcal{C}$ is
-
-```math
-H(p,q) = -\sum_{i=i}^K p(\pi_i) \log q(\pi_i) 
-```
-"""
-
-# ╔═╡ e4d8c4f6-6f04-11eb-2396-ede262fdb6f3
-md"""
-
-How can we determine \(\sigma^2\) and \(\sigma^2_0\)? We can of course specify these values based on domain knowledge, but what domain knowledge do we really have regarding the weight space of models such as neural network? In these cases it might be difficult to assign sensible values, and we might instead want to leverage empirical Bayes. We can fit a model with out best guesses for both \(\sigma^2\) and \(\sigma^2_0\) and then use the residuals to estimate \(\sigma^2\) and the distribution over fit weights to estimate \(\sigma^2_0\). This process can be iterated. By doing this we are clearly running into issues with overfitting but it is a way to get parameters we can interpret.
-"""
-
-# ╔═╡ b33a7252-7123-11eb-19a4-bbdd32955f2d
-begin
-	"""This is just to include external files. Please ignore it"""
-	function ingredients(path::String)
-		# this is from the Julia source code (evalfile in base/loading.jl)
-		# but with the modification that it returns the module instead of the last object
-		name = Symbol(basename(path))
-		m = Module(name)
-		Core.eval(m,
-	        Expr(:toplevel,
-	             :(eval(x) = $(Expr(:core, :eval))($name, x)),
-	             :(include(x) = $(Expr(:top, :include))($name, x)),
-	             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
-	             :(include($path))))
-		m
-	end
-	
-	Data = ingredients("../src/data.jl")
-	GR = ingredients("../src/gaussian_regression.jl")
-end
-
-# ╔═╡ c72a0ccc-711d-11eb-1be5-bf22fa41f863
-begin
-	using Random, Distributions, LinearAlgebra, Parameters, Plots, PlutoUI
-	using Zygote: gradient
-	Random.seed!(1231245)
-	
-	X, y = Data.linreg_toy_data()
-	D, N = size(X)
-	xlim = (-10, 10)
-	scatter(X', y, title = "Observed data", 
-		xlabel = "X", ylabel = "y",
-		label = nothing
-	)
-end
-
 # ╔═╡ d9caa89e-6f0d-11eb-2242-47baa342e9a9
 begin
 	using Printf
@@ -184,91 +202,12 @@ begin
 	plot(prior_plt)	
 end
 
-# ╔═╡ aba3a4be-7450-11eb-2a00-6581be94dcec
-begin
-	function fit(loss, θ; steps, α = 0.001)
-		losses = zeros(steps)
-		for i in 1:steps
-			losses[i] = loss(θ)
-			∇θ = first(gradient(loss, θ))
-			θ -= α*∇θ
-		end
-		θ, losses
-	end
-	
-	relu(θ) = x -> max.(0., x' .- θ)'
-
-	function nn(f, Ws)
-		x -> begin
-			for W in Ws
-				x = f(W)(x)
-			end
-			x
-		end
-	end
-	
-	
-	σ = 0.5
-	μ = zeros(K)
-	Σ = diagm(ones(K))
-	ϕ = nn
-	θ₀ = [
-		collect(range(-10, 10, length = K))',
-		collect(range(-10, 10, length = K))',
-		collect(range(-10, 10, length = K))',
-	]
-	θ̂, losses = fit(
-		θ -> -GR.log_evidence(GR.GaussianRegression(X, y, μ, Σ, σ, ϕ(relu, θ))), 
-		θ₀; steps = 100
-	)
-	plot(losses, title = "Loss curve", xlabel = "Iterations",
-		ylabel = "Neg. log marginal likelihood",
-		legend = false)
-end
-
-# ╔═╡ 2f28b3e6-7466-11eb-1427-c94e7d886152
-begin
-	reg = GR.GaussianRegression(X, y, μ, Σ, σ, ϕ(relu, θ̂))
-	xx = collect(range(-8, 8, length = 500))'
-	
-	pf₀ = GR.prior_f(reg, xx)
-	prior_nn_plt = plot(xx', pf₀.μ, ribbon = 2*sqrt.(diag(pf₀.Σ)), 
-		label = "p(f)", legend =:topleft,
-		xlim = xlim, ylim = (-100, 100))
-	
-	for (i, f) in enumerate(eachcol(rand(pf₀, 5)))
-        plot!(
-            prior_nn_plt, xx', f, color=3,
-            label=i == 1 ? "Prior sample" : nothing
-        )
-    end
-	
-	scatter!(prior_nn_plt, X', y, label = "Observations",
-		color = 1,
-		title ="Prior predictive",
-		xlabel = "x", ylabel = "f(x)")
-	
-	pf = GR.posterior_f(reg, xx)
-	posterior_nn_plt = plot(xx', pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
-		color = 2, label = "p(f | X, y)", legend =:topleft,
-		xlim = xlim, ylim = (-10, 10))
-	for (i, f) in enumerate(eachcol(rand(pf, 5)))
-        plot!(
-            posterior_nn_plt, xx', f, color=2,
-            label=i == 1 ? "Posterior sample" : nothing
-        )
-    end
-	scatter!(posterior_nn_plt, X', y, label = "Observations",
-		color = 1,
-		title ="Posterior predictive",
-		xlabel = "x", ylabel = "f(x)")
-	
-	plot(prior_nn_plt, posterior_nn_plt, layout = (2,1), size = (660, 600))
-end
-
-# ╔═╡ b8e5bd12-75cf-11eb-19df-379c49419514
+# ╔═╡ 82be2a6a-75ea-11eb-2076-5b651ffb2782
 md"""
-Log evidence: $(GR.log_evidence(reg))
+### Ending notes
+While deep learning and probabilistic machine learning might seem like separate worlds, we have seen that deep learning has a clear probabilistic interpretation as a hierarchial Bayesian model where we parameterise many stacked feature functions and find the MAP posterior estimate. We also saw how weight decay, commonly used when training deep networks can be interpreted as the ratio between a prior variance and observation noise, revealing an underlying probabilistic model.
+
+Stacking feature functions is clearly a powerful way to improve model expressiveness. But there is another, quite literally orthogonal, way we can increase expressiveness. What if we instead of creating *deeper* models, create *wider*? What about *infinitely wide*? This will be the focus of the next notebook.
 """
 
 # ╔═╡ Cell order:
@@ -277,11 +216,9 @@ Log evidence: $(GR.log_evidence(reg))
 # ╟─793fc384-75ec-11eb-325e-a5982d91d954
 # ╟─b8e5bd12-75cf-11eb-19df-379c49419514
 # ╠═aba3a4be-7450-11eb-2a00-6581be94dcec
-# ╠═2f28b3e6-7466-11eb-1427-c94e7d886152
-# ╠═f88bc10a-75cf-11eb-001b-35d72fde997b
+# ╠═fe881ea4-7a7b-11eb-3c2f-e9537b3c4a96
+# ╟─f88bc10a-75cf-11eb-001b-35d72fde997b
 # ╟─4b90cb7e-6f00-11eb-2fe7-af7d99ad7ed9
 # ╟─d9caa89e-6f0d-11eb-2242-47baa342e9a9
-# ╠═82be2a6a-75ea-11eb-2076-5b651ffb2782
-# ╠═278e0f08-6fbd-11eb-25e8-5b73d8d7ed6d
-# ╠═e4d8c4f6-6f04-11eb-2396-ede262fdb6f3
-# ╠═b33a7252-7123-11eb-19a4-bbdd32955f2d
+# ╟─82be2a6a-75ea-11eb-2076-5b651ffb2782
+# ╟─b33a7252-7123-11eb-19a4-bbdd32955f2d

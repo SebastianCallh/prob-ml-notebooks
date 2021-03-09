@@ -18,19 +18,14 @@ md"""
 # Gaussian processes
 We have previously seen how we can stack feature learners to learn more abstract features and create deep neural networks. In this notebook we are instead going to consider using an infinite amount of features. This *sounds* impossible, but it is in fact possible to construct a finite representation of an infinite amount of features throught the [kernel trick](https://en.wikipedia.org/wiki/Kernel_method).
 
-[Probabilistic ML - Lecture 9 - Gaussian Processes](https://www.youtube.com/watch?v=s2_L86D4kUE&list=PL05umP7R6ij1tHaOFY96m5uX3J21a6yNd&index=10)
-"""
-
-# ╔═╡ 8a63acf4-74f0-11eb-017b-a9cff89c7416
-md"""
-Here's our data again.
+Relevant lecture: [Probabilistic ML - Lecture 9 - Gaussian Processes](https://www.youtube.com/watch?v=s2_L86D4kUE&list=PL05umP7R6ij1tHaOFY96m5uX3J21a6yNd&index=10)
 """
 
 # ╔═╡ 946d3c80-74f0-11eb-2529-6950c042cb57
 md"""
 ### Infinitely many features
 Let us see what happens when we distribute the features evenly over the input space and allow the number of features $F$ to go to infinity, or equivalently the distance between them to go to zero. For simplicity let us assume 
-$\Sigma = \frac{\sigma^2 (c_\text{max} - c_\text{min}))}{F}I$ is a diagonal matrix where $c_\text{max}$ and $c_\text{min}$ denote the "leftmost" and "rightmost" feature and $F$ denotes the number of features. With this covariance matrix we can write
+$\Sigma = \frac{\sigma^2 (c_\text{max} - c_\text{min})}{F}I$ is a diagonal matrix where $c_\text{max}$ and $c_\text{min}$ denote the "leftmost" and "rightmost" feature and $F$ denotes the number of features. With this covariance matrix we can write
 
 ```math
 \begin{equation}
@@ -97,7 +92,7 @@ and so we can express this *infinite sum* of features as
 \end{split}
 \end{equation}
 ```
-
+Okay, the algebra tells us we can express an infinite number of features, infinitesimally close to each other in closed form. But what does this look like in practice? Since we have a kind of infinitely dense grid of features, we get very smoothly varying functions. 
 """
 
 # ╔═╡ f3922600-712c-11eb-2bca-db4ed5d1552a
@@ -133,11 +128,6 @@ begin
 	xlim = -7, 7
 	ylim = -5, 5
 	σ = 0.3
-	scatter(
-		X', y, title="Observed data",
-		xlabel="X", ylabel="y",
-		label=nothing
-	)
 end
 
 # ╔═╡ e8ed0dcc-714b-11eb-3841-59355f0e8d89
@@ -150,6 +140,7 @@ kernels = Dict(
 
 # ╔═╡ 1de6f408-714b-11eb-21ba-3fac6f051fc2
 md"""
+For the derivation we assumed Gaussian features, but it turns out that we are not limited to those for this trick to work. There are in fact many feature functions we can evaluate in the infinite limit, and these functions are known as *kernels*.   
 
 ### Kernel functions
 The choice of kernel greatly affects the kind of data we can model. Different kernels correspond to different feature spaces, which have different inner products, which dictate which observations are considered close.
@@ -200,6 +191,33 @@ begin
 	plot(prior_p, posterior_p, layout = (2, 1), size = (670, 700))
 end
 
+# ╔═╡ 8081937e-7a84-11eb-3202-95b98b9dea11
+begin
+	prior_ex_samples = 
+		GP.GaussianProcess(X, y, GP.constant(0), kernels["rbf"], σ) |>
+		gp -> GP.prior(gp, xx) |>
+		prior -> rand(prior, n_samples)
+	
+	prior_ex_p = plot(xlim = xlim, ylim = (-10, 10),
+		xlabel = "x", ylabel = "y",
+		title = "Prior predictive",
+		legend = :topleft
+	)
+	plot!(
+		prior_ex_p, xx[:], prior.μ,
+		ribbon = 2*sqrt.(diag(prior.Σ) .+ σ^2), 
+		label = "p(f)",
+		color = 1
+	)
+	plot!(
+		prior_ex_p, xx[:], prior_ex_samples, 
+		label = reshape([i == 1 ? "Sample" : false for i in 1:n_samples], 1, :),
+		color = 3
+	)
+	scatter!(prior_ex_p, X[:], y, label = "Observations", color = 1)
+	
+end
+
 # ╔═╡ 69a2ae8e-715d-11eb-3e9b-cbdd846616ee
 md"""
 Log evidence: $(GP.log_evidence(gp))
@@ -207,11 +225,11 @@ Log evidence: $(GP.log_evidence(gp))
 
 # ╔═╡ Cell order:
 # ╠═164a8246-712d-11eb-29a8-654f3e2d6f72
-# ╠═8a63acf4-74f0-11eb-017b-a9cff89c7416
 # ╠═792a5b4e-712c-11eb-23f6-895892faac22
 # ╠═946d3c80-74f0-11eb-2529-6950c042cb57
+# ╠═8081937e-7a84-11eb-3202-95b98b9dea11
 # ╟─e8ed0dcc-714b-11eb-3841-59355f0e8d89
 # ╠═1de6f408-714b-11eb-21ba-3fac6f051fc2
-# ╠═69a2ae8e-715d-11eb-3e9b-cbdd846616ee
+# ╟─69a2ae8e-715d-11eb-3e9b-cbdd846616ee
 # ╠═42ef5752-712d-11eb-1465-4d5254770d45
 # ╟─f3922600-712c-11eb-2bca-db4ed5d1552a

@@ -61,7 +61,7 @@ function log_evidence(reg::GaussianRegression)
     -0.5 * r' * inv(κXX + Λ) * r - log(det(κXX + Λ)) + 0.5 * N * log(2π)
 end
 
-function plot_features(reg::GaussianRegression, xx, ylim, xlim)
+function plot_features(reg::GaussianRegression, xx, features_xx, xlim, ylim)
     @unpack X, y = reg
     pf₀ = prior_f(reg, xx)
     fs = rand(pf₀, 5)
@@ -83,16 +83,33 @@ function plot_features(reg::GaussianRegression, xx, ylim, xlim)
     scatter!(prior_plt, X', y, label="Observations", color=1)
 
     pfₙ = posterior_f(reg, xx)
-    posterior_plt  = plot(
+    posterior_plt = plot(
         xx', pfₙ.μ, ribbon=2 * sqrt.(diag(pfₙ.Σ)),
         color=2,
         label="p(f | X, y)", legend=:topleft
     )
+
+    for (i, f) in enumerate(eachcol(rand(pfₙ, 5)))
+        plot!(
+            posterior_plt, xx', f, color=2,
+            label=i == 1 ? "Posterior sample" : nothing
+        )
+    end
+
     scatter!(
         posterior_plt, X', y, label="Observations",
         color=1,
         title="Posterior predictive",
         xlabel="x", ylabel="f(x)"
+    )
+
+    scatter!(
+        posterior_plt, features_xx', ylim[1] .* 0.95 .* ones(length(features_xx)),
+        markershape=:uptriangle,
+        label="Feature locations",
+        ylim=ylim,
+        color=3
+
     )
 
     plot(prior_plt, posterior_plt, layout=(2, 1), size=(600, 600))

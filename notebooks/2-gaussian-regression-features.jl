@@ -19,14 +19,12 @@ using PlutoUI
 # ╔═╡ b6cfc0c6-6dfb-11eb-058d-db10ed33d71a
 md"""
 ## Bayesian regression with learned features
-In the last notebook we saw how to compute the posterior under a Gaussian prior and likelihood when fitting a linear model. The model we fit was doubly linear: it was linear in model weights $w$, and we actually fit a line. However, the posterior did not capture the data and was poorly calibrated.
-We will leave the calibration issue for a bit and focus on improving the model fit. To thie end we are going to see just how flexible the model can be for various $\phi$, and how to learn feature representations. 
+In the last notebook we saw how to compute the posterior under a Gaussian prior and likelihood when fitting a linear model. The model we fit was doubly linear: it was linear in model weights $w$, and we fit an actual line to the data. However, the posterior did not capture the data and was poorly calibrated (in our case, overly confident).
+We will leave the calibration issue for a bit and focus on improving the model fit. To this end we are going to see just how flexible the model can be for various $\phi$, and how to learn feature representations. 
 
 We are going to use the same setting as in the previous notebook. Recall that $X \in \mathbb{R}^{D \times N}$ is the data matrix with $N$ observations of dimension $D$ and $\mathbf{y} \in \mathbb{R}^N$ the observed values.
 
-The `linreg_toy_data` and `GaussianRegression` can be found in `gaussian_linreg.jl`.
-
-[Probabilistic ML - Lecture 8 - Learning Representations](https://www.youtube.com/watch?v=Zb0K_S5JJU4&t=1142s)
+Relevant lecture: [Probabilistic ML - Lecture 8 - Learning Representations](https://www.youtube.com/watch?v=Zb0K_S5JJU4&t=1142s)
 """
 
 # ╔═╡ 659f63b2-6ea7-11eb-2333-35d3f51a748c
@@ -56,7 +54,7 @@ Feature function $(@bind feature_name Select(collect(keys(ϕs))))
 
 # ╔═╡ 4acd1fa0-6eb3-11eb-15b2-bf84b53f3880
 md"""
-Hopefully you see how flexible the  Gaussian inference framework is. Since we are not tied to any function class we can simply plug in one that is better suited for any particular problem. While we have been limiting ourselves to using features of our input points $\phi(X)$ we are in fact free to use features $\phi(x\prime)$ of any input point $x\prime$ of our choice (you can think of this as as bias term). You can play around with the slider below to create a grid of features which are used to fit the model to see the impact of this.
+Hopefully you see how flexible the  Gaussian inference framework is. Since we are not tied to any function class we can simply plug in one that is better suited for any particular problem. While we have been limiting ourselves to using features of our input points $\phi(X)$ we are in fact free to use features $\phi(x\prime)$ of any input point $x\prime$ of our choice (you can think of this as as bias term). You can play around with the slider below to create a grid of features which are used to fit the model to see the impact of this. Since everything is Gaussian, we can also compute the model evidence as a way of evaluating the model fit. The higher the evidence, the more probable the data is to be observed under the model. Hence, we can use the evidence as a way to perform model selection.
 
 Number of features $(@bind num_features_input2 Slider(2:25; show_value=true))
 
@@ -67,9 +65,7 @@ Feature function $(@bind feature_name2 Select(collect(keys(ϕs))))
 # ╔═╡ f93023b0-6eb5-11eb-189a-a7951ec0431e
 md"""
 As you may have noticed, using more features allows for a richer model which better captures the data. And while more flexibility is great, we have now introduced several new steps to our modeling: We have to select $\phi$ and $x\prime$. 
-Note that nothing forces us to use a grid for $x \prime$; we just do it here for convenience. If we were serious about leraning this function we might instead want to place more features in regions where the function changes rapidly, and fewer where not much is going on.
-
-An additional complication which we so far swept under the rug is that $\phi$ can have parameters $\theta$ of its own. In fact, the Gaussian and sigmoid function in the list above have two parameters each. How do we deal with all these new quantities? Let us take a step back and think about how this fits in our inference framework.
+Note that nothing forces us to use a grid for $x \prime$; we just do it here for convenience. If we were serious about leraning this function we might instead want to place more features in regions where the function changes rapidly, and fewer where not much is going on. An additional complication which we so far swept under the rug is that $\phi$ can have parameters $\theta$ of its own. How do we deal with all these new quantities? Let us take a step back and think about how this fits in our inference framework.
 
 ### Hierarchical Bayesian inference
 So far the object of interest for us has been
@@ -114,7 +110,7 @@ So how do we find $\hat \theta$? A simple solution to this is to pick $\theta$ t
 ```
 
 In other words, we minimise the negative log marginal likelihood. Let us do this to find good locations for the location of the feature functions $\theta = x \prime$. 
-A convenient way of doing this is through [gradient descent](https://en.wikipedia.org/wiki/Gradient_descent), which requires us to take gradients of $p(y \vert X, \theta)$ with respect to $\theta$. Luckily, we live in the era of automatic differentiation, and Julia has *great* libraries to this end. We are going to utilize the `gradient` function from the [Zygote](https://fluxml.ai/Zygote.jl/) package to compute the gradient of our loss. On caveat with this is that we cannot differentiate through discontiuities, so the step function features have to go for now. You can use the by now familiar sliders below to fit different features. Note that this optimisation is not convex so you might get stuck in local minima.
+A convenient way of doing this is through [gradient descent](https://en.wikipedia.org/wiki/Gradient_descent), which requires us to take gradients of $p(y \vert X, \theta)$ with respect to $\theta$. Luckily, we live in the era of automatic differentiation, and Julia has *great* libraries to this end. We are going to utilize the `gradient` function from the [Zygote](https://fluxml.ai/Zygote.jl/) package to compute the gradient of our loss. On caveat with this is that we cannot differentiate through discontiuities, so the step function features have to go for now. You can use the by now familiar sliders below to fit different features. Note that this optimisation is not convex so you will probably find different minimas each run.
 
 Number of features $(@bind input_k3 Slider(2:20; show_value=true))
 
@@ -123,10 +119,10 @@ Feature function $(@bind input_feature3 Select(collect(filter(k-> k != "step fun
 
 # ╔═╡ 0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
 md"""
-By maximising the marginal likelihood we are able to learn good features for our data which we can then use to perform Gaussian inference. The learned features are noticably better than the uniformly placed ones, and significantly fewer than assigning one feature per data point. Despite this the posterior captures the data very well.
+By maximising the marginal likelihood we are able to learn good features for our data which we can then use to perform Gaussian inference. Even though the learned features are significantly fewer than the number of data point, their positions lets them capture the data well.
 
 ### Ending notes.
-In this notebook we expanded the notion of Gaussian inference to more flexible function classes by using various feature functions. We also saw an example of feature learning, where we learn the position of the features using type-II maximum likelihood. Even though we only learned the feature positions, we can use the exact same procedure for any hyper-parameter, as long as we can take gradients which is made super easy thanks to automatic differentiation. Indeed, this is the idea that leads us to deep learning.
+In this notebook we expanded the notion of Gaussian inference to more flexible function classes by using various feature functions. We also saw an example of feature learning, where we learn the position of the features using type-II maximum likelihood. Even though we only learned the feature positions in our example, we can use the exact same procedure for any hyper-parameter, as long as we can computer their gradients. Thanks to automatic differentiation, this can be done automatically for us. Feature learning using gradients and automatic differentiation is a very powerful framework, and the key idea behind deep learning. In the next notebook we are going to take a probabilistic perspective on deep learning and see how it relates to what we have seen so far.  
 """
 
 # ╔═╡ dca94b3a-7122-11eb-3080-fdbc8581823a
@@ -158,6 +154,7 @@ begin
 	X, y = Data.linreg_toy_data()
 	D, N = size(X)
 	xlim = -10, 10
+	ylim = -12, 12
 	scatter(
 		X', y, title = "Observed data", 
 		xlabel = "X", ylabel = "y",
@@ -172,7 +169,7 @@ begin
 		X, y, zeros(N), diagm(ones(N)), .5,
 		features(feature_name, X)
 	)
-	GR.plot_features(reg₁, xx)
+	GR.plot_features(reg₁, xx, X, xlim, ylim)
 end
 
 # ╔═╡ 7d4fae44-74ed-11eb-254e-f7bde69e6eee
@@ -212,7 +209,7 @@ begin
 		diagm(ones(num_features_input2)), σ,
 		features(feature_name2, feature_xx)
 	)
-	GR.plot_features(reg₂, xx)
+	plt = GR.plot_features(reg₂, xx, feature_xx, xlim, ylim)
 end
 
 # ╔═╡ 4f3a8702-74ed-11eb-1732-bf79fe482cec
@@ -226,7 +223,6 @@ begin
 		X, y, μ, Σ, σ,
 		features(input_feature3, θ̂)
 	)
-	
 	pf = GR.posterior_f(reg₃, xx)
 	posterior_plt = plot(xx', pf.μ, ribbon = 2*sqrt.(diag(pf.Σ)), 
 		color = 2, label = "p(f | X, y)", legend =:topleft,
@@ -259,5 +255,5 @@ end
 # ╟─574db804-6ec0-11eb-205c-65ad68022b58
 # ╠═f0ef960a-6ecd-11eb-2a55-7d447bea3af4
 # ╠═f7ae77f2-6ed9-11eb-33f7-db8775acec19
-# ╟─0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
+# ╠═0db1d1bc-6e3c-11eb-0b32-b9a56eb0b2e6
 # ╟─dca94b3a-7122-11eb-3080-fdbc8581823a
